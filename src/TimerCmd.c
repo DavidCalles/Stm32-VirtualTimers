@@ -14,8 +14,9 @@
 #include <ctype.h>
 
 #include "common.h"
-#include "stm32f4xx_it.c"
-#include "stm32f4xx_hal_tim.c"
+#include "stm32f4xx_it.h"
+#include "stm32f4xx_hal_tim.h"
+#include "stm32f4xx_hal_gpio.h"
 
 /**************************************************************************
 --------------------------- PRECOMPILER DEFINITIONS -----------------------
@@ -27,15 +28,23 @@
 ------------------------------- VARIABLE TYPES ----------------------------
 ***************************************************************************/
 typedef struct{
-  uint32_t count;       // virtual counter
-  uint32_t flag;        // ready flag
+  uint32_t timeout;     // virtual counter timeout
+  uint32_t current;     // virtual counter current value
+  uint8_t flag;         // ready flag
   uint8_t repetitive;   // count 1 single time or undefinetely
 }V_TIMER;
+
+// Linked list node structure
+typedef struct{
+  V_TIMER *vTimerPtr;
+  struct V_NODE *nextNode;
+}V_NODE;
 
 /**************************************************************************
 ---------------------------- GLOBAL VARIABLES --------------------------
 ***************************************************************************/
-TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim3;  // Timer Handler 
+V_NODE *head = NULL;      // head of linked list
 
 /**************************************************************************
 ------------------------ OWN FUNCTION DEFINITIONS -------------------------
@@ -50,11 +59,11 @@ TIM_HandleTypeDef htim3;
 ---------------------------------------------------------------------------*/
 ParserReturnVal_t TimerInit()
 { 
-  uint8_t timebase = 0; //input in microseconds
+  uint16_t timebase = 0; //input in microseconds
   uint16_t tim3Prescaler = 1; // 0xFFFF 84
   uint16_t tim3Period = 1; //0xFFFF 65535
 
-  if (!fetch_uint32_arg(&timebase))
+  if (!fetch_uint16_arg(&timebase))
     printf("Please enter (1) for ms or (0) for us (default).\n");
   else{
     if(timebase == MILISECONDS){
@@ -67,7 +76,7 @@ ParserReturnVal_t TimerInit()
     }
 
     // Set up the timer
-    __HAL_RCC_TIM3_CLK_ENABLE()
+    __HAL_RCC_TIM3_CLK_ENABLE();
     TIM_ClockConfigTypeDef sClockSourceConfig = {0};
     htim3.Instance = TIM3;
     htim3.Init.Prescaler = tim3Prescaler;
@@ -100,10 +109,10 @@ void TIM3_IRQHandler(void)
 
 // Callback whenever timer updates/overflows
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-
+  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_7);
 
 }
 
 // MACRO: Add new command to help menu
-ADD_CMD("timerinit", TimerInit,"\t\tInitializes timer ADC channels")
+ADD_CMD("timerinit", TimerInit,"\t\tInitializes timer.")
 
