@@ -1,6 +1,8 @@
 /**************************************************************************
-* File Name         TimerCmd.c
-* Description       
+* File Name             TimerCmd.c
+* Description           Initializes the hardware timer with interrupts and
+*                       creates command to setup virtual timers with hardware
+*                       timer as the timebase.
 *				          
 * Date				          Name(s)						          Action
 * October 5, 2021		    Jaskaran K. & David C.			First Implementation
@@ -27,10 +29,10 @@
 /**************************************************************************
 --------------------------- PRECOMPILER DEFINITIONS -----------------------
 ***************************************************************************/
-#define MICROSECONDS 0
-#define MILISECONDS 1
+#define MICROSECONDS 0        // to select micreseconds as timebase
+#define MILISECONDS 1         // to select miliseconds as timebase
 
-#define MAX_TIMERS 16
+#define MAX_TIMERS 16         // maximum number of timers
 
 /**************************************************************************
 ------------------------------- VARIABLE TYPES ----------------------------
@@ -47,9 +49,9 @@ typedef struct{
 /**************************************************************************
 ---------------------------- GLOBAL VARIABLES --------------------------
 ***************************************************************************/
-TIM_HandleTypeDef htim3;  // Timer Handler 
-volatile V_TIMER timers[MAX_TIMERS];
-uint8_t tIndex = 0;
+TIM_HandleTypeDef htim3;              // Timer Handler 
+volatile V_TIMER timers[MAX_TIMERS];  // Timer instances
+uint8_t tIndex = 0;                   // index of current timer
 
 /**************************************************************************
 ------------------------ OWN FUNCTION DEFINITIONS -------------------------
@@ -57,26 +59,28 @@ uint8_t tIndex = 0;
 
 /*--------------------------------------------------------------------------
 *	Name:			    TimerInit
-*	Description:	
+*	Description:	Initialize the hardware timer selecting a combination of 
+*               prescalar and period based on input arguements
 *	Parameters:		void
 *
 *	Returns:		  ret: CmdReturnOk = 0 if Okay.
 ---------------------------------------------------------------------------*/
 ParserReturnVal_t TimerInit()
 { 
-  uint16_t timebase = 0; //input in microseconds
+  uint16_t timebase = 0; // input in microseconds
   uint16_t tim3Prescaler = 1; // 0xFFFF 84
-  uint16_t tim3Period = 1; //0xFFFF 65535
+  uint16_t tim3Period = 1; // 0xFFFF 65535
 
   if (fetch_uint16_arg(&timebase))
     printf("Please enter (1) for ms or (0) for us (default).\n");
-  else{
+  else{         
+    // Combination of prescalar and period
     if(timebase == MILISECONDS){
       tim3Prescaler = 1000;
-      tim3Period = HAL_RCC_GetPCLK2Freq() / 1000000 - 1;
+      tim3Period = HAL_RCC_GetPCLK2Freq() / 1000000 - 1;  //
     }
     else{
-      tim3Prescaler = 1;
+      tim3Prescaler = 10;
       tim3Period = HAL_RCC_GetPCLK2Freq() / 1000000 - 1;
     }
     
@@ -98,9 +102,10 @@ ParserReturnVal_t TimerInit()
     {
       printf("Error 2 initializing the timer\n");
     }
+    // Initialize timer interrupts
     HAL_NVIC_SetPriority((IRQn_Type) TIM3_IRQn, (uint32_t) 0, (uint32_t) 1);
     HAL_NVIC_EnableIRQ((IRQn_Type) TIM3_IRQn);
-    // Start timer
+    // Start timer timebase
     HAL_TIM_Base_Start_IT(&htim3);
 
   }
@@ -110,8 +115,9 @@ ParserReturnVal_t TimerInit()
 ADD_CMD("timerinit", TimerInit,"\t\tInitializes hardware timer.")
 
 /*--------------------------------------------------------------------------
-*	Name:			    TimerInit
-*	Description:	
+*	Name:			    TimerInstance
+*	Description:	Initialize the structure of a new virtual timer and display 
+*               help messages
 *	Parameters:		void
 *
 *	Returns:		  ret: CmdReturnOk = 0 if Okay.
@@ -157,11 +163,12 @@ ParserReturnVal_t TimerInstance(int action)
 ADD_CMD("timer", TimerInstance,"\t\tInitialize a virtual timer instance.")
 
 /*--------------------------------------------------------------------------
-*	Name:			    TimerInit
-*	Description:	
+*	Name:			    VirtualTimers
+*	Description:	interrupt routine to update all virtual timers as well as 
+*               their corresponding GPIO pins
 *	Parameters:		void
 *
-*	Returns:		  ret: CmdReturnOk = 0 if Okay.
+*	Returns:		  void
 ---------------------------------------------------------------------------*/
 void VirtualTimers()
 { 
@@ -169,21 +176,26 @@ void VirtualTimers()
 
   for(uint8_t i=0; i<tIndex; i++){
 
-    if(timers[i].enable){
+    if(timers[i].enable)
+    {
       // Timer has reached its desired value
-      if(timers[i].current >= timers[i].timeout){
+      if(timers[i].current >= timers[i].timeout)
+      {
         timers[i].flag = 1;
         HAL_GPIO_TogglePin(GPIOA, (uint32_t) 1 << timers[i].gpioPin);
         // Check if timer is repetitive
-        if (timers[i].repetitive){
+        if (timers[i].repetitive)
+        {
           timers[i].current = 0;
         }
-        else{
+        else
+        {
           // Disable it if not repetitive
           timers[i].enable = 0;
         }  
       }
-      else{
+      else
+      {
         // Normal increment
         timers[i].current++;
         timers[i].flag = 0;
@@ -193,11 +205,39 @@ void VirtualTimers()
 }
 
 /*--------------------------------------------------------------------------
-*	Name:			    TimerInit
-*	Description:	
+*	Name:			    TimerDisable
+*	Description:	Disables all timers
 *	Parameters:		void
 *
 *	Returns:		  ret: CmdReturnOk = 0 if Okay.
+---------------------------------------------------------------------------*/
+ParserReturnVal_t TimerDisable()
+{ 
+  for(uint8_t i=0; i<tIndex; i++)
+  {  
+    // Reset all GPIO pins
+    HAL_GPIO_WritePin(GPIOA, (uint32_t) 1 << timers[i].gpioPin, GPIO_PIN_RESET);
+  }
+  // Disables the interrupt
+  HAL_NVIC_DisableIRQ((IRQn_Type) TIM3_IRQn);
+  // Stop timebase
+  HAL_TIM_Base_Stop_IT(&htim3);
+  // Set current timer index to 0
+  tIndex = 0;
+  // Resets timer to default values
+  HAL_TIM_Base_DeInit(&htim3);
+
+  return CmdReturnOk;
+}
+// MACRO: Add new command to help menu
+ADD_CMD("timerdisable", TimerDisable,"\t\tDisable all timers.")
+
+/*--------------------------------------------------------------------------
+*	Name:			    TIM3_IRQHandler
+*	Description:  Timer 3 Interrupt handler
+*	Parameters:		void
+*
+*	Returns:		  void
 ---------------------------------------------------------------------------*/
 void TIM3_IRQHandler(void)
 {
@@ -207,10 +247,10 @@ void TIM3_IRQHandler(void)
 
 /*--------------------------------------------------------------------------
 *	Name:			    TimerInit
-*	Description:	
-*	Parameters:		void
+*	Description:	Callbacks for timer overflow/update event
+*	Parameters:		TIM_HandleTypeDef *htim : timer peripheral handler
 *
-*	Returns:		  ret: CmdReturnOk = 0 if Okay.
+*	Returns:		  void
 ---------------------------------------------------------------------------*/
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
   //HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
