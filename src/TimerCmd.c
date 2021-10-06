@@ -68,17 +68,18 @@ ParserReturnVal_t TimerInit()
   uint16_t tim3Prescaler = 1; // 0xFFFF 84
   uint16_t tim3Period = 1; //0xFFFF 65535
 
-  if (!fetch_uint16_arg(&timebase))
+  if (fetch_uint16_arg(&timebase))
     printf("Please enter (1) for ms or (0) for us (default).\n");
   else{
     if(timebase == MILISECONDS){
       tim3Prescaler = 1000;
-      tim3Period = 84;
+      tim3Period = HAL_RCC_GetPCLK2Freq() / 1000000 - 1;
     }
     else{
       tim3Prescaler = 1;
-      tim3Period = 84;
+      tim3Period = HAL_RCC_GetPCLK2Freq() / 1000000 - 1;
     }
+    
     // Set up the timer
     __HAL_RCC_TIM3_CLK_ENABLE();
     TIM_ClockConfigTypeDef sClockSourceConfig = {0};
@@ -116,7 +117,6 @@ void TIM3_IRQHandler(void)
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
   HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-
 }
 
 // MACRO: Add new command to help menu
