@@ -118,7 +118,7 @@ ADD_CMD("timerinit", TimerInit,"\t\tInitializes hardware timer.")
 *	Name:			    TimerInstance
 *	Description:	Initialize the structure of a new virtual timer and display 
 *               help messages
-*	Parameters:		void
+*	Parameters:		int action: used for help messages
 *
 *	Returns:		  ret: CmdReturnOk = 0 if Okay.
 ---------------------------------------------------------------------------*/
