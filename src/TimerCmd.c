@@ -17,6 +17,11 @@
 #include "stm32f4xx_it.h"
 #include "stm32f4xx_hal_tim.h"
 #include "stm32f4xx_hal_gpio.h"
+#include "stm32f4xx_hal_rcc.h"
+#include "stm32f4xx_hal_pwr.h"
+#include "stm32f4xx_hal_rcc_ex.h"
+#include "stm32f4xx_hal_pwr_ex.h"
+#include "stm32f4xx_hal_cortex.h"
 
 /**************************************************************************
 --------------------------- PRECOMPILER DEFINITIONS -----------------------
@@ -74,7 +79,6 @@ ParserReturnVal_t TimerInit()
       tim3Prescaler = 1;
       tim3Period = 84;
     }
-
     // Set up the timer
     __HAL_RCC_TIM3_CLK_ENABLE();
     TIM_ClockConfigTypeDef sClockSourceConfig = {0};
@@ -93,7 +97,8 @@ ParserReturnVal_t TimerInit()
     {
       printf("Error 2 initializing the timer\n");
     }
-
+    HAL_NVIC_SetPriority((IRQn_Type) TIM3_IRQn, (uint32_t) 0, (uint32_t) 1);
+    HAL_NVIC_EnableIRQ((IRQn_Type) TIM3_IRQn);
     // Start timer
     HAL_TIM_Base_Start_IT(&htim3);
 
@@ -108,8 +113,9 @@ void TIM3_IRQHandler(void)
 }
 
 // Callback whenever timer updates/overflows
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_7);
+  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 
 }
 
