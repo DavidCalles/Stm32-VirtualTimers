@@ -30,6 +30,8 @@
 #define MICROSECONDS 0
 #define MILISECONDS 1
 
+#define MAX_TIMERS 16
+
 /**************************************************************************
 ------------------------------- VARIABLE TYPES ----------------------------
 ***************************************************************************/
@@ -40,21 +42,14 @@ typedef struct{
   uint8_t flag;         // ready flag
   uint8_t enable;       // Current status of virtual timer
   uint32_t repetitive;  // count 1 single time or undefinetely
-  uint8_t nodeID;
 }V_TIMER;
-
-// Linked list node structure
-typedef struct node{
-  V_TIMER *vTimerPtr;
-  struct node *nextNode;
-}V_NODE;
 
 /**************************************************************************
 ---------------------------- GLOBAL VARIABLES --------------------------
 ***************************************************************************/
 TIM_HandleTypeDef htim3;  // Timer Handler 
-V_NODE *head = NULL;      // head of linked list
-uint8_t countNodes = 0;
+volatile V_TIMER timers[MAX_TIMERS];
+uint8_t tIndex = 0;
 
 /**************************************************************************
 ------------------------ OWN FUNCTION DEFINITIONS -------------------------
@@ -145,41 +140,17 @@ ParserReturnVal_t TimerInstance(int action)
     }
   }
   
-  /* Add new node */
-  // Allocate memory for the node
-	V_NODE *newTimerPtr = NULL;
-	newTimerPtr = (V_NODE*)malloc(sizeof(V_NODE));
-	if (newTimerPtr == NULL) {
-		printf("Memory Allocation Error!\n");
-	}
-  /* Fill in new node */
-  newTimerPtr->vTimerPtr->timeout = arguments[0];
-  newTimerPtr->vTimerPtr->gpioPin = arguments[1]; 
-  newTimerPtr->vTimerPtr->repetitive = arguments[2];
-  newTimerPtr->vTimerPtr->flag = 0;
-  newTimerPtr->vTimerPtr->current = 0;
-  newTimerPtr->vTimerPtr->enable = 1;
-  newTimerPtr->vTimerPtr->nodeID = countNodes;
+  /* Fill in new timer */
+  timers[tIndex].timeout = arguments[0];
+  timers[tIndex].gpioPin = arguments[1]; 
+  timers[tIndex].repetitive = arguments[2];
+  timers[tIndex].flag = 0;
+  timers[tIndex].current = 0;
+  timers[tIndex].enable = 1;
 
-  /* Position new node */
-  // Empty linked list
-  if(head == NULL){
-    printf("All good:%d\n", sizeof(newTimerPtr));
-    //newTimerPtr->nextNode = NULL;
-    //head = newTimerPtr;
-  }/*
-  else{
-    // Traverse list and put at the end
-    V_NODE *currentTimerPtr = head;
-    while(currentTimerPtr->nextNode != NULL){
-      currentTimerPtr = currentTimerPtr->nextNode;
-    }
-    currentTimerPtr->nextNode = newTimerPtr;
-    newTimerPtr->nextNode = NULL;
-  }
-  printf("Virtual Timer ID: %d\n", countNodes);
-  countNodes++;
-*/
+  /* Position of next node */
+  tIndex++;
+
   return CmdReturnOk;
 }
 // MACRO: Add new command to help menu
@@ -195,32 +166,29 @@ ADD_CMD("timer", TimerInstance,"\t\tInitialize a virtual timer instance.")
 void VirtualTimers()
 { 
   // Traverse all virtual timer instances
-  V_NODE *currentPtr = head;
 
-  while(currentPtr != NULL){
+  for(uint8_t i=0; i<tIndex; i++){
 
-    if(currentPtr->vTimerPtr->enable){
+    if(timers[i].enable){
       // Timer has reached its desired value
-      if(currentPtr->vTimerPtr->current >= currentPtr->vTimerPtr->timeout){
-        currentPtr->vTimerPtr->flag = 1;
-        HAL_GPIO_TogglePin(GPIOA, (uint32_t) 1 << currentPtr->vTimerPtr->gpioPin);
+      if(timers[i].current >= timers[i].timeout){
+        timers[i].flag = 1;
+        HAL_GPIO_TogglePin(GPIOA, (uint32_t) 1 << timers[i].gpioPin);
         // Check if timer is repetitive
-        if (currentPtr->vTimerPtr->repetitive){
-          currentPtr->vTimerPtr->current = 0;
+        if (timers[i].repetitive){
+          timers[i].current = 0;
         }
         else{
           // Disable it if not repetitive
-          currentPtr->vTimerPtr->enable = 0;
+          timers[i].enable = 0;
         }  
       }
       else{
         // Normal increment
-        currentPtr->vTimerPtr->current++;
-        currentPtr->vTimerPtr->flag = 0;
+        timers[i].current++;
+        timers[i].flag = 0;
       }
     }
-    // Get next node
-    currentPtr = currentPtr->nextNode;
   }
 }
 
@@ -246,5 +214,5 @@ void TIM3_IRQHandler(void)
 ---------------------------------------------------------------------------*/
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
   //HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-  //VirtualTimers();
+  VirtualTimers();
 }
